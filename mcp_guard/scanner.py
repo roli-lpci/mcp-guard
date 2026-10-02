@@ -32,6 +32,10 @@ class Scanner:
                 findings = rule.check(capability, manifest)
                 all_findings.extend(findings)
 
+        # Server-level checks (e.g. prompt injection in server name/description)
+        for rule in self.rules:
+            all_findings.extend(rule.check_server(manifest))
+
         # Evaluate deny policy after scanning rules
         policy = deny_policy or self.deny_policy
         if policy:

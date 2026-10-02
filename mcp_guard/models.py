@@ -67,6 +67,8 @@ class RiskFinding(BaseModel):
     capability_name: str = ""
     capability_type: MCPCapabilityType | None = None
     suggestion: str = ""
+    # Rule-specific details, emitted as SARIF result properties
+    properties: dict[str, str] = Field(default_factory=dict)
 
 
 class ScanResult(BaseModel):

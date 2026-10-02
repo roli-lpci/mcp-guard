@@ -12,8 +12,10 @@ from rich.markup import escape
 
 from . import __version__
 from .formatters import to_json, to_rich, to_sarif
+from .injection import InjectionEngineUnavailableError
 from .parser import MCPParser
 from .policy import DenyPolicy
+from .rules import ALL_RULES, PromptInjectionRule, SecurityRule
 from .scanner import Scanner
 
 
@@ -74,6 +76,13 @@ def main() -> None:
     multiple=True,
     help="Tool pattern to deny (supports wildcards and server/tool scoping, can be repeated)",
 )
+@click.option(
+    "--strict-injection",
+    is_flag=True,
+    default=False,
+    help="Add Little Canary's structural filter to prompt injection checks "
+    "(requires the 'canary' extra)",
+)
 def scan(
     path: str,
     output_format: str,
@@ -83,6 +92,7 @@ def scan(
     deny_flag: bool,
     cli_deny_servers: tuple[str, ...],
     cli_deny_tools: tuple[str, ...],
+    strict_injection: bool,
 ) -> None:
     """Scan an MCP server for security risks.
 
@@ -129,7 +139,16 @@ def scan(
         deny_policy.servers.extend(cli_deny_servers)
         deny_policy.tools.extend(cli_deny_tools)
 
-    scanner = Scanner(deny_policy=deny_policy)
+    rules: list[SecurityRule] | None = None
+    if strict_injection:
+        try:
+            strict_rule = PromptInjectionRule(strict=True)
+        except InjectionEngineUnavailableError as e:
+            console.print(f"[red]Error: {escape(str(e))}[/red]")
+            sys.exit(1)
+        rules = [strict_rule if isinstance(r, PromptInjectionRule) else r for r in ALL_RULES]
+
+    scanner = Scanner(rules=rules, deny_policy=deny_policy)
     result = scanner.scan(manifest)
 
     # Format output

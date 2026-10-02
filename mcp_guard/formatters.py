@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -30,6 +31,7 @@ def to_dict(result: ScanResult) -> dict[str, Any]:
                 "capability": f.capability_name,
                 "type": f.capability_type.value if f.capability_type else None,
                 "suggestion": f.suggestion,
+                "properties": f.properties,
             }
             for f in result.findings
         ],
@@ -81,6 +83,7 @@ def to_sarif(result: ScanResult) -> dict[str, Any]:
                 ],
                 "properties": {
                     "auth_status": auth_status,
+                    **finding.properties,
                 },
             }
         )
@@ -183,9 +186,10 @@ def to_rich(result: ScanResult) -> None:
             findings_table.add_row(
                 finding.rule_id,
                 f"[{level_color}]{finding.level.value}[/{level_color}]",
-                finding.capability_name,
-                finding.message,
-                finding.suggestion,
+                # Escaped: names and messages can quote attacker-controlled metadata
+                escape(finding.capability_name),
+                escape(finding.message),
+                escape(finding.suggestion),
             )
 
         console.print(findings_table)

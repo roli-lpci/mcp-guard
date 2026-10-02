@@ -33,6 +33,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Strict prompt injection scanning (--strict-injection); no model or network calls
+canary = [
+    "little-canary>=0.4.0,<0.5",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -40,6 +44,7 @@ dev = [
     "mypy>=1.0",
     "pyright>=1.1.400",
     "types-PyYAML>=6.0",
+    "little-canary>=0.4.0,<0.5",
 ]
 
 [project.scripts]

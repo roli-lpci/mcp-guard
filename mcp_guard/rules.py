@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+from .injection import (
+    InjectionMatch,
+    MetadataField,
+    PromptInjectionDetector,
+    capability_fields,
+    server_fields,
+)
 from .models import (
     MCPCapability,
     MCPManifest,
@@ -23,6 +32,10 @@ class SecurityRule:
     ) -> list[RiskFinding]:
         """Check a capability against this rule."""
         raise NotImplementedError
+
+    def check_server(self, manifest: MCPManifest) -> list[RiskFinding]:
+        """Check server-level manifest fields; runs once per scan."""
+        return []
 
 
 class UnauthenticatedWriteRule(SecurityRule):
@@ -275,6 +288,89 @@ class ExplicitlyDisabledAuthRule(SecurityRule):
         return findings
 
 
+class PromptInjectionRule(SecurityRule):
+    """Detect prompt injection phrasing in model-visible MCP metadata.
+
+    Checks names, descriptions, parameter names and every key and string value
+    of ``inputSchema`` (nested objects, arrays, ``$defs``), plus the server name
+    and description. ``strict=True`` adds Little Canary's structural filter.
+    """
+
+    rule_id = "MCP008"
+    description = "Possible prompt injection in metadata"
+
+    def __init__(self, strict: bool = False) -> None:
+        self.detector = PromptInjectionDetector(strict=strict)
+
+    def check(
+        self,
+        capability: MCPCapability,
+        manifest: MCPManifest,
+    ) -> list[RiskFinding]:
+        return self.check_tool(capability)
+
+    def check_tool(self, capability: MCPCapability) -> list[RiskFinding]:
+        """Check one capability's name, description and input schema."""
+        return self._findings(capability_fields(capability), capability)
+
+    def check_server(self, manifest: MCPManifest) -> list[RiskFinding]:
+        return self._findings(server_fields(manifest), None, manifest.name)
+
+    def check_manifest(self, manifest: MCPManifest) -> list[RiskFinding]:
+        """Check server-level fields and every capability of a manifest."""
+        findings = self.check_server(manifest)
+        for capability in manifest.capabilities:
+            findings.extend(self.check_tool(capability))
+        return findings
+
+    def _findings(
+        self,
+        fields: Iterable[MetadataField],
+        capability: MCPCapability | None,
+        server_name: str = "",
+    ) -> list[RiskFinding]:
+        findings: list[RiskFinding] = []
+        for field in fields:
+            for match in self.detector.scan_field(field):
+                findings.append(self._to_finding(match, capability, server_name))
+        return findings
+
+    def _to_finding(
+        self,
+        match: InjectionMatch,
+        capability: MCPCapability | None,
+        server_name: str,
+    ) -> RiskFinding:
+        owner = f"Capability '{capability.name}'" if capability else f"Server '{server_name}'"
+        if match.injection_type == "uninspected-metadata":
+            message = f"{owner} field {match.location} was not fully scanned ({match.evidence})"
+            suggestion = "Review this field manually; it exceeds the injection scan limits"
+        else:
+            message = (
+                f"{owner} field {match.location} contains possible prompt injection "
+                f"({match.injection_type}): {match.evidence!r}"
+            )
+            suggestion = (
+                "Remove instructions aimed at the model from metadata, or review the server "
+                "before connecting an agent to it"
+            )
+        return RiskFinding(
+            rule_id=self.rule_id,
+            level=match.level,
+            message=message,
+            capability_name=capability.name if capability else server_name,
+            capability_type=capability.type if capability else None,
+            suggestion=suggestion,
+            properties={
+                "injection_type": match.injection_type,
+                "metadata_field": match.location,
+                "detector": match.detector,
+                "evidence": match.evidence,
+                "quoted": "true" if match.quoted else "false",
+            },
+        )
+
+
 # Registry of all rules
 ALL_RULES: list[SecurityRule] = [
     UnauthenticatedWriteRule(),
@@ -284,4 +380,5 @@ ALL_RULES: list[SecurityRule] = [
     WriteWithoutReadRule(),
     DestructiveWithoutConfirmationRule(),
     ExplicitlyDisabledAuthRule(),
+    PromptInjectionRule(),
 ]
