@@ -103,11 +103,13 @@ def scan(
     try:
         manifest = MCPParser.from_file(path)
     except FileNotFoundError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[red]Error: {escape(str(e))}[/red]")
         sys.exit(1)
     except ValueError as e:
-        # MCPParser wraps JSON decode and read errors in ValueError
-        console.print(f"[red]Error: {e}[/red]")
+        # MCPParser wraps JSON decode and read errors in ValueError.
+        # Escaped: a validation error quotes the offending input verbatim, so an
+        # attacker-controlled manifest can carry Rich markup into the message.
+        console.print(f"[red]Error: {escape(str(e))}[/red]")
         sys.exit(1)
 
     # Resolve deny policy from config file or CLI options
@@ -116,7 +118,7 @@ def scan(
         try:
             deny_policy = DenyPolicy.from_yaml(config_path)
         except Exception as e:
-            console.print(f"[red]Error loading config file: {e}[/red]")
+            console.print(f"[red]Error loading config file: {escape(str(e))}[/red]")
             sys.exit(1)
     else:
         path_obj = Path(path)
@@ -164,7 +166,7 @@ def scan(
     if output_str is not None:
         if output:
             Path(output).write_text(output_str, encoding="utf-8")
-            console.print(f"[green]Output written to {output}[/green]")
+            console.print(f"[green]Output written to {escape(output)}[/green]")
         else:
             click.echo(output_str)
 
@@ -194,15 +196,15 @@ def info(path: str) -> None:
     try:
         manifest = MCPParser.from_file(path)
     except FileNotFoundError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"[red]Error: {escape(str(e))}[/red]")
         sys.exit(1)
     except ValueError as e:
-        # MCPParser wraps JSON decode and read errors in ValueError
-        console.print(f"[red]Error: {e}[/red]")
+        # Escaped: see scan() above - validation errors quote the input verbatim.
+        console.print(f"[red]Error: {escape(str(e))}[/red]")
         sys.exit(1)
 
-    console.print(f"[bold]Server:[/bold] {manifest.name} v{manifest.version}")
-    console.print(f"[bold]Description:[/bold] {manifest.description}")
+    console.print(f"[bold]Server:[/bold] {escape(manifest.name)} v{escape(manifest.version)}")
+    console.print(f"[bold]Description:[/bold] {escape(manifest.description)}")
     console.print(f"[bold]Capabilities:[/bold] {len(manifest.capabilities)}")
 
     for cap in manifest.capabilities:
@@ -215,11 +217,11 @@ def info(path: str) -> None:
         write_status = "✏️" if cap.is_write else ""
         destructive_status = "💥" if cap.is_destructive else ""
         console.print(
-            f"  {auth_status} {escape(f'[{cap.type.value}]')} {cap.name} "
+            f"  {auth_status} {escape(f'[{cap.type.value}]')} {escape(cap.name)} "
             f"{write_status} {destructive_status}"
         )
         if cap.description:
-            console.print(f"    {cap.description[:80]}")
+            console.print(f"    {escape(cap.description[:80])}")
 
 
 if __name__ == "__main__":

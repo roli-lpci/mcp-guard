@@ -137,8 +137,10 @@ def to_rich(result: ScanResult) -> None:
     console.print()
     console.print(
         Panel(
-            f"[bold]{result.manifest.name}[/bold] v{result.manifest.version}\n"
-            f"{result.manifest.description}",
+            # Escaped: manifest metadata is attacker-controlled and Rich would
+            # otherwise parse markup in it, raising MarkupError mid-scan.
+            f"[bold]{escape(result.manifest.name)}[/bold] v{escape(result.manifest.version)}\n"
+            f"{escape(result.manifest.description)}",
             title="MCP Server",
             border_style="blue",
         )
@@ -186,7 +188,8 @@ def to_rich(result: ScanResult) -> None:
             findings_table.add_row(
                 finding.rule_id,
                 f"[{level_color}]{finding.level.value}[/{level_color}]",
-                # Escaped: names and messages can quote attacker-controlled metadata
+                # Escaped: these can quote attacker-controlled metadata (capability
+                # name, description, schema), which Rich would read as markup.
                 escape(finding.capability_name),
                 escape(finding.message),
                 escape(finding.suggestion),
